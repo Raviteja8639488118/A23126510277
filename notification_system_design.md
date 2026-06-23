@@ -204,3 +204,45 @@ With 5,000,000 notifications in the database, the query has slowed down because:
 FROM notifications
 WHERE notificationType = 'Placement'
   AND createdAt >= NOW() - INTERVAL '7 days';
+
+
+
+  ---
+
+# Stage 4: High-Load Performance & Mitigation Strategies
+
+This section analyzes options to prevent database exhaustion caused by reading notifications on every client page load, outlining clear strategies along with architectural tradeoffs.
+
+---
+
+## 1. Suggested Architectural Solutions
+
+### Strategy A: Implement Distributed Caching (e.g., Redis Cache-Aside)
+Instead of querying PostgreSQL on every page load, intercept the request using a fast in-memory cache layer (like Redis). 
+* When a student requests notifications, check Redis first (**Cache Hit**). 
+* If missing (**Cache Miss**), fetch from PostgreSQL, write the results back to Redis with a Time-to-Live (TTL), and return them.
+* Invalidate or update the specific Redis key whenever a new notification is generated or marked as read.
+
+### Strategy B: Transition to Event-Driven Real-Time Pushes (SSE/WebSockets)
+Move away from stateless request-driven fetching entirely. 
+* Fetch notifications from the database **only once** during the initial app bootstrap/login handshake.
+* Maintain an open, stateful connection via **Server-Sent Events (SSE)** or **WebSockets**.
+* When new alerts occur, push the individual event delta across the stream. The frontend updates its local memory state reactively without ever making another database request.
+
+### Strategy C: Client-Side State Management & Local Storage Syncing
+Store fetched notifications in the client-side global store (e.g., Redux, Pinia, or React Context) or inside browser storage (`localStorage` / `IndexedDB`). Combine this with an optimistic cache header setup like `ETag` or HTTP caching (`Cache-Control: private, max-age=60`) to stop redundant network roundtrips within short time windows.
+
+---
+
+## 2. Tradeoffs Comparison Matrix
+
+| Mitigation Strategy | Pros / Performance Wins | Cons / Tradeoffs |
+| :--- | :--- | :--- |
+| **Strategy A: Redis Cache-Aside** | * Drastically reduces database CPU and Read I/O.<br>* Sub-millisecond read latency. | * Requires managing complex cache invalidation rules.<br>* Higher memory infrastructure cost. |
+| **Strategy B: Real-Time Stream (SSE)** | * Near-zero database read queries over time.<br>* Immediate, premium real-time user UX. | * Holds open persistent connections, demanding high server socket capacity.<br>* Harder to scale horizontally without Redis Pub/Sub backplanes. |
+| **Strategy C: Client Cache (Local/ETag)** | * Zero server resources hit for repeated sub-page navigations.<br>* Extremely easy to drop in. | * Risk of data staleness if notifications are modified from another device.<br>* Dependent on browser behavior and storage constraints. |
+
+---
+
+## 3. Recommended Approach
+The optimal enterprise setup is a **hybrid of Strategy A and Strategy B**. Use an **SSE stream** to push incoming items down to active connections instantly, while letting any unexpected hard page-refreshes pull directly from a pre-warmed **Redis Cache cluster** rather than the primary core transactional database.
