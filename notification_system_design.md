@@ -344,3 +344,33 @@ function handle_in_app_delivery(task):
     save_to_db(task.student_id, task.message)
     # Stream over active SSE connection channel instantaneously
     push_to_app(task.student_id, task.message)
+
+
+
+    ---
+
+# Stage 6: Priority Inbox Algorithm Design
+
+This section documents the custom business logic sorting implementation used to calculate the top 'n' high-importance notifications efficiently in memory.
+
+---
+
+## 1. Sorting Algorithm & Criteria Logic
+To deliver a dynamic, high-value priority inbox window without crushing database compute constraints, the streaming raw notification feed is evaluated along two distinct vectors:
+
+1. **Category Priority Weighting:** Hardcoded static weights are assigned where $\text{Placement (3)} > \text{Result (2)} > \text{Event (1)}$.
+2. **Chronological Recency:** Inside matching weight categories, notifications are sorted using their epoch millisecond timestamp values to bring recent items to the top.
+
+The compound sorting evaluation tuple can be modeled mathematically as:
+$$\text{Score} = (\text{Priority\_Weight}, \text{Epoch\_Timestamp})$$
+
+---
+
+## 2. Maintaining Top 10 Scalability at Scale
+When streams scale to millions of continuous data pulses, running global array re-sorting cascades can quickly turn into a $O(N \log N)$ bottleneck. To process updates with optimal resource usage, we recommend implementing a **Bounded Min-Heap Structure** (Priority Queue):
+
+* **The Strategy:** Initialize an in-memory Min-Heap capped at a maximum length of 10 elements.
+* **Stream Insertion Logic:** For every incoming message notification, evaluate its score against the current root item of the heap (the lowest scoring element currently inside your top 10).
+    * If the new element's score is lower than the root, it is discarded immediately ($O(1)$ verification cost).
+    * If it is higher, drop the heap root and insert the new element ($O(\log K)$ where $K=10$).
+* This maintains the optimal Top 10 list at a fixed processing run configuration cost, scaling linearly at an overall complexity of $O(N \log K)$ instead of bloating.
