@@ -169,3 +169,38 @@ D. Delete a Notification
 SQL
 DELETE FROM notifications
 WHERE id = 'notif_883f12a9-c702-4b20' AND user_id = 'usr_12345';
+
+
+
+
+---
+
+# Stage 3: Query Optimization & Performance Analysis
+
+This section analyzes a slow production query, addresses index design strategies, and implements a targeted reporting query based on the requirements in image_d73a3f.jpg.
+
+---
+
+## 1. Analysis of the Existing Query
+
+### Is the query accurate?
+Yes, functionally the query is accurate. It accurately filters by a specific student ID, targets unread states (`isRead = false`), and sorts them chronologically (`createdAt ASC`).
+
+### Why is this query slow?
+With 5,000,000 notifications in the database, the query has slowed down because:
+1. **Full Table Scan:** Without a proper composite index, the database engine has to scan millions of rows to find matching items for a single student.
+2. **On-the-Fly Sorting Cost:** The database is forced to sort the resulting rows in memory or disk via an explicit sort operation to satisfy `ORDER BY createdAt ASC`.
+3. **Select Star (`SELECT *`):** Retrieving all columns (including potentially large text payloads in the `message` field) increases I/O overhead and network transfer times.
+
+### What should change and what is the computation cost?
+* **The Change:** Create a **Composite B-Tree Index** matching the exact filtering and sorting path:
+```sql
+  CREATE INDEX idx_notifications_student_unread_date 
+  ON notifications (studentID, isRead, createdAt ASC);
+
+
+
+  SELECT DISTINCT studentID
+FROM notifications
+WHERE notificationType = 'Placement'
+  AND createdAt >= NOW() - INTERVAL '7 days';
