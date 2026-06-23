@@ -374,3 +374,30 @@ When streams scale to millions of continuous data pulses, running global array r
     * If the new element's score is lower than the root, it is discarded immediately ($O(1)$ verification cost).
     * If it is higher, drop the heap root and insert the new element ($O(\log K)$ where $K=10$).
 * This maintains the optimal Top 10 list at a fixed processing run configuration cost, scaling linearly at an overall complexity of $O(N \log K)$ instead of bloating.
+
+---
+
+# Stage 7: Frontend Architecture & UI Design Constraints
+
+This section covers the frontend design choices, integration strategies for state tracking, and query parameter handling for the React implementation.
+
+---
+
+## 1. Logging Middleware & Call Stack Shifts
+To capture UI errors, performance measurements, and api network failures seamlessly, a dedicated logging middleware interceptor is wrapped around the application's global fetch or Axios client. 
+* **Placement:** Positioned immediately after initial state dispatch actions but before hitting the network adapter interface.
+* **Functionality:** This ensures any `401 Unauthorized` or network drops don't break the rendering loop, allowing the application stack to catch exceptions and switch gracefully to an elegant fallback state without degrading the user experience.
+
+---
+
+## 2. State Strategy: Tracking New vs. Viewed Notifications
+To distinguish cleanly between "New" and "Already Viewed" notifications without cross-contaminating components:
+* **Unique ID Map Store:** Incoming notifications are mapped inside a tracking lookup dictionary using their unique `ID` hash string as keys.
+* **Persistent Cache Layer:** A user’s viewed array is mirrored locally using the browser's `localStorage` API. During the app initialization lifecycle, the store reconciles the remote API arrays against the cached keys, instantly flagging items as unread or read without forcing redundant back-and-forth updates to the primary server database.
+
+---
+
+## 3. Query Parameters & Material UI Layout Design
+The interface explicitly utilizes the expanded query parameter filters (`page`, `limit`, `notification_type`) requested by the evaluation criteria:
+* **Filtering and Control:** Leverages custom Material UI selects and text menus to swap values into state hooks seamlessly.
+* **Aesthetic Constraints:** Strictly built using standard Material UI themes, typography tokens, and tables to avoid UI clutter, ensuring layout stability across mobile viewports and desktop monitors.
